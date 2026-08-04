@@ -1,0 +1,101 @@
+---
+title: "An objective prior for the number of degrees of freedom of a multivariate t distribution"
+author: '[F. Javier Rubio](https://sites.google.com/site/fjavierrubio67/) and Cristiano Villa'
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## An objective prior for the number of degrees of freedom of a multivariate t distribution
+
+The [$d$-variate $t$ probability density function](https://en.wikipedia.org/wiki/Multivariate_t-distribution) with $\nu>0$ degrees of freedom (see \citealp{L94} and \citealp{K04} for an extensive review of this model) is given by
+$$
+f_d({\bf x}\vert {\mu},{\Sigma},\nu) = \dfrac{\Gamma\left(\dfrac{\nu+d}{2}\right)}{\Gamma\left(\dfrac{\nu}{2}\right)\sqrt{(\pi\nu)^d\vert{\Sigma}\vert}}  \left(1+\dfrac{({\bf x}-{\mu})^{T}{\Sigma}^{-1}({\bf x}-{\mu})}{\nu}\right)^{-\frac{\nu+d}{2}},
+$$
+[1] derived a discrete objective prior for the number of degrees of freedom of the multivariate $t$ distribution. This prior is truncated at $\nu_{\max}$, pre-specified by the user, typically $\nu_{\max}=30$ and discrete. The key idea is to assign a "worth" to each model identified by a value of $\nu$, by objectively measuring what is lost if that specific model is removed, and it is the true model. The loss in information measure employed in [1] is based on the Kullback--Leibler divergence between the model identified by a $\nu$ and the nearest one. [1] Also proposed a tractable and scalable expression to calculate the Kullback-Leibler divergence for any dimension $d=1,2,3,...$. 
+
+The following R code implements this prior for dimensions $d=1,2,3,4,5$.
+
+
+**References**
+
+1. [Objective priors for the number of degrees of freedom of a multivariate t distribution and the t-copula](https://arxiv.org/abs/1701.05638)
+
+2. [Kullback Leibler divergence between two multivariate t distributions](http://rpubs.com/FJRubio/DKLt)
+
+```{r}
+rm(list=ls())
+# Package required for a nice format of the tables 
+library(knitr) 
+
+# Normalising constant
+K <- function(d,nu) (gamma(0.5*(nu+d))/( gamma(0.5*nu)*sqrt((pi*nu)^d) ))
+
+# Kullback Liebler divergence
+DKL <- function(nu,nup){
+  val1 <- log(K(d,nu)/K(d,nup)) -0.5*(nu+d)*(digamma(0.5*(nu+d))-digamma(0.5*nu))  
+  tempf <- Vectorize(function(t) (1+t/nu)^(-0.5*(nu+d))*t^(0.5*d-1)*log(1+t/nup))
+  int<- integrate(tempf,0,Inf,rel.tol = 1e-9)$value
+  val2 <- (K(d,nu)*pi^(0.5*d)*0.5*(nup+d)/gamma(0.5*d))*int
+  return(val1+val2)
+}
+
+#-------------------------------------------------------------------------------------------------------------
+# Kullback Leibler in one dimension
+d=1 # dimension
+
+D <- vector()
+for(i in 1:30) D[i] = exp(DKL(i,i+1))-1
+
+# Objective prior for nu
+plot(D/sum(D),ylim=c(0,0.8),xlab=~nu,ylab="Prior probability",main="Objective prior",cex.axis=1.5,cex.lab=1.5,pch=19,cex=1.5)
+
+#-------------------------------------------------------------------------------------------------------------
+# Kullback Leibler in two dimensions
+rm(d)
+d=2 # dimension
+
+D <- vector()
+for(i in 1:30) D[i] = exp(DKL(i,i+1))-1
+
+# Objective prior for nu
+plot(D/sum(D),ylim=c(0,0.8),xlab=~nu,ylab="Prior probability",main="Objective prior",cex.axis=1.5,cex.lab=1.5,pch=19,cex=1.5)
+
+#-------------------------------------------------------------------------------------------------------------
+# Kullback Leibler in three dimensions
+rm(d)
+d=3 # dimension
+
+D <- vector()
+for(i in 1:30) D[i] = exp(DKL(i,i+1))-1
+
+# Objective prior for nu
+plot(D/sum(D),ylim=c(0,0.8),xlab=~nu,ylab="Prior probability",main="Objective prior",cex.axis=1.5,cex.lab=1.5,pch=19,cex=1.5)
+
+#-------------------------------------------------------------------------------------------------------------
+# Kullback Leibler in four dimensions
+rm(d)
+d=4 # dimension
+
+D <- vector()
+for(i in 1:30) D[i] = exp(DKL(i,i+1))-1
+
+# Objective prior for nu
+plot(D/sum(D),ylim=c(0,0.8),xlab=~nu,ylab="Prior probability",main="Objective prior",cex.axis=1.5,cex.lab=1.5,pch=19,cex=1.5)
+
+
+#-------------------------------------------------------------------------------------------------------------
+# Kullback Leibler in five dimensions
+rm(d)
+d=5 # dimension
+
+D <- vector()
+for(i in 1:30) D[i] = exp(DKL(i,i+1))-1
+
+# Objective prior for nu
+plot(D/sum(D),ylim=c(0,0.8),xlab=~nu,ylab="Prior probability",main="Objective prior",cex.axis=1.5,cex.lab=1.5,pch=19,cex=1.5)
+```
+

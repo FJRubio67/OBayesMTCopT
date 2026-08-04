@@ -1,0 +1,53 @@
+---
+title: "A weakly informative prior for the degrees of freedom of the t distribution"
+author: '[F. Javier Rubio](https://sites.google.com/site/fjavierrubio67/)'
+date: "02/07/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## A weakly informative prior for the degrees of freedom of the t distribution based on a kurtosis measure
+
+[1] proposed a general elicitation strategy for models that control kurtosis, such as the degrees of freedom parameter of the [Student-t distribution](https://en.wikipedia.org/wiki/Student%27s_t-distribution), $\nu>0$.  The basic idea consists on assigning a prior distribution to a bounded kurtosis measure, as a function of the parameter of interest $\nu$, say $\kappa=\kappa(\nu)$. The boundedness assumption on $\kappa$ allows us to assign a proper uniform prior on this quantity, while the injectivity is required for obtaining the induced prior on the parameter $\nu$ by inverting this function. In general, most kurtosis measures are not available in close form as functions of the parameter $\nu$, however, we can sample from the induced distribution on the parameter $\nu$ and construct (parametric and nonparametric) approximations of this prior.
+
+[1] propose to adopt the scalar kurtosis measure $\kappa = 2\dfrac{f(\pi_R)}{f(\text{mode})}-1$ from [2], where $\pi_R$ represents the positive mode of $-f^{\prime}$ (the inflection point). This measure $\kappa$ takes values in $K\subset(-1,1)$, assigning the value $\kappa=0.213$ to the normal distribution. Moreover, $\kappa$ is an injective function of $\delta$ for the Student-$t$ distribution which takes values in $(0.213,0.633)$. This prior for $\nu$ in the Student-$t$ model is an alternative to others priors proposed for the Student-t distribution (see [3,4]). The algorithm to sample from the prior on $\nu$, $\pi(\nu)$, is as follows:
+
+
+**Algorithm**
+
+(0) For $j=1,\dots,N$
+
+(i) Simulate $u_j\sim U(0.213,0.633)$.
+
+(ii) Calculate $\nu_j$ as the value that satisfies $\kappa(\nu_j)=u_j$. This is a sample from $\pi(\nu)$.
+
+The following R code shows a handy approximation to the prior distribution obtained with this strategy. The idea is to fit a log-TPSAS distribution [6] to the samples obtained (not shown here) from $\pi(\nu)$.
+
+1. [Bayesian modelling of skewness and kurtosis with Two-Piece Scale and shape distributions](http://projecteuclid.org/euclid.ejs/1440680330)
+
+2. [Asymmetry and Gradient Asymmetry Functions: Density-Based Skewness and Kurtosis](http://onlinelibrary.wiley.com/doi/10.1111/j.1467-9469.2008.00599.x/abstract)
+
+3. [Objective Prior for the Number of Degrees of Freedom of a t Distribution](http://projecteuclid.org/euclid.ba/1393251776)
+
+4. [Objective priors for the number of degrees of freedom of a multivariate t distribution and the t-copula](https://arxiv.org/abs/1701.05638)
+
+5. [TPSAS R package](http://rpubs.com/FJRubio/TPSAS)
+
+6. [Survival and lifetime data analysis with a flexible class of distributions](http://dx.doi.org/10.1080/02664763.2015.1120710)
+
+```{r}
+rm(list=ls())
+library(TPSAS)
+
+# Parameters obtained by fitting the sample from \pi(\nu)
+MLE <- c(0.84886337, 1.44326981, 0.05384718, 0.89544807)
+
+# Prior on nu
+prior <- Vectorize(function(x) dtpsas(log(x),MLE[1],MLE[2],MLE[3],MLE[4],param="eps")/x)
+curve(prior,0,30,lwd=2,col="blue",n=1000,xlab=~nu,ylab="Density",main="Prior for the degrees of freedom",cex.axis=1.5,cex.lab=1.5)
+```
+
+

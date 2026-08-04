@@ -1,0 +1,170 @@
+---
+title: "t-copula with t and two piece t marginals"
+author: '[F. Javier Rubio](https://sites.google.com/site/fjavierrubio67/)'
+date: "01/07/2017"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## A real data example to illustrate how to fit a t-copula with t and two piece t marginals
+
+The $t$-copula is defined as [1,2] 
+$$
+C_d^t({\bf u}\vert {\bf R},\nu) = \int_{-\infty}^{t^{-1}_{\nu}(u_1)}\cdots\int_{-\infty}^{t^{-1}_{\nu}(u_d)} \dfrac{\Gamma\left(\dfrac{\nu+d}{2}\right)}{\Gamma\left(\dfrac{\nu}{2}\right)\sqrt{(\pi\nu)^d\vert{\bf R}\vert}} \left(1+\dfrac{{\bf x}^{\top}{\bf R}^{-1}{\bf x}}{\nu}\right)^{-\frac{\nu+d}{2}} d{\bf x},
+$$
+where ${\bf u}=(u_1,\dots,u_d)\in[0,1]^d$, ${\bf R}$ is a correlation matrix, and $t^{-1}_{\nu}$ denotes the quantile function associated to a Student-$t$ variate with $\nu>0$ degrees of freedom. The corresponding density function is given by [1]
+$$
+c_d^t({\bf u}\vert {\bf R},\nu) = \dfrac{f_d(t^{-1}_{\nu}(u_1),\dots,t^{-1}_{\nu}(u_d)\vert {\bf 0},{\bf R},\nu)}{\prod_{j=1}^d f_1(t^{-1}_{\nu}(u_j))}.
+$$
+Analogously to the multivariate $t$ distribution, the $t$-copula converges to the Normal copula for increasing values of the number of degrees of freedom. That is, $C_{\nu,d}^t\rightarrow C_d^N$ for $\nu\rightarrow\infty$. 
+
+Here, we consider a financial application of the t-copula where we model jointly the daily log-returns for the Swiss Market Index (SMI) and Swiss reinsurer (Swiss.Re). The data are available from the R package 'ghyp' and contain $n = 1769$ observations corresponding to the period January 2000 to January 2007. We consider two cases for the marginals: (i) student-t with $\nu_1,\nu_2$ degrees of freedom, and (2) two-piece student-t (see [1,3]). We fit these models using maximum likelihood estimation.
+
+
+**References**
+
+1. [Objective priors for the number of degrees of freedom of a multivariate t distribution and the t-copula](https://arxiv.org/abs/1701.05638)
+
+2. [The t Copula and Related Copulas](http://www.jstor.org/stable/25472643)
+
+3. [Inference in Two-Piece Location-Scale Models with Jeffreys Priors](http://projecteuclid.org/euclid.ba/1393251764)
+
+4. [twopiece R package](http://rpubs.com/FJRubio/twopiece)
+
+5. [Copula (probability theory) on Wikipedia](https://en.wikipedia.org/wiki/Copula_(probability_theory))
+
+```{r}
+##############################################################################################
+# Data from : ghyp package
+##############################################################################################
+rm(list=ls())
+library(mnormt)
+library(mvtnorm)
+library(ghyp)
+library(twopiece)
+library(copula)
+library(fMultivar)
+
+# The SMI stocks data:  "SMI"  vs    "Swiss.Re"
+data(smi.stocks)
+Y = as.matrix(smi.stocks[ , c(1, 6)])
+colnames(smi.stocks[ , c(1, 6)])
+
+plot(Y)
+cor(Y)
+
+##############################################################################################
+# MLE: bivariate t-copula with two-piece t marginals
+##############################################################################################
+
+# log likelihood function
+loglik = function(par){
+  mu = par[1:2]; sigma = par[3:4]; nu1 = par[5]; nu2 = par[6]; rho = par[7]; nut = par[8]; epsilon = par[9:10];
+  if(par[3]>0 & par[4]>0 & par[5]>0 & par[6]>0 & par[8]>0 & abs(par[7])<1 & abs(par[9])<1 & abs(par[10])<1){
+    t.cop = tCopula(rho,dim=2,df=nut)
+    prob.t =cbind(ptp4(Y[,1]-mu[1],0,sigma[1],epsilon[1],nu1,param="eps",FUN=pt),ptp4(Y[,2]-mu[2],0,sigma[2],epsilon[2],nu2,param="eps",FUN=pt))
+    val.cop = -sum(dCopula(prob.t, copula=t.cop, log=TRUE))
+    val.marg1 = -sum( dtp4(Y[,1]-mu[1],0,sigma[1],epsilon[1],nu1,param="eps",FUN=dt,log=T) )
+    val.marg2 = -sum( dtp4(Y[,2]-mu[2],0,sigma[2],epsilon[2],nu2,param="eps",FUN=dt,log=T) )
+    return(val.cop + val.marg1 + val.marg2)
+  }
+  else return(Inf)
+}
+
+start = c(0,0,0.01,0.01,3,2.5,0.7,4,0,0) 
+
+# Optimisation step and AIC
+OPT = nlminb(start,loglik,control=list(maxit=10000))
+OPT
+
+AIC <- 2*OPT$objective + 2*length(start)
+
+##############################################################################################
+# MLE: bivariate t-copula with t marginals
+##############################################################################################
+# log likelihood function
+loglik0 = function(par){
+  mu = par[1:2]; sigma = par[3:4]; nu1 = par[5]; nu2 = par[6]; rho = par[7]; nut = par[8];
+  if(par[3]>0 & par[4]>0 & par[5]>0 & par[6]>0 & par[8]>0 & abs(par[7])<1){
+    t.cop = tCopula(rho,dim=2,df=nut)
+    prob.t = cbind(pt((Y[,1]-mu[1])/sigma[1],df=nu1),pt((Y[,2]-mu[2])/sigma[2],df=nu2))
+    val.cop = -sum(dCopula(prob.t, copula=t.cop, log=TRUE))
+    val.marg1 = -sum( dt((Y[,1]-mu[1])/sigma[1],df=nu1,log=T) - log(sigma[1]) )
+    val.marg2 = -sum( dt((Y[,2]-mu[2])/sigma[2],df=nu2,log=T) - log(sigma[2]) )
+    return(val.cop + val.marg1 + val.marg2)
+  }
+  else return(Inf)
+}
+
+# Initial point
+start0 = c(0,0,0.01,0.01,3,2,0,5) 
+
+# Optimisation step and AIC
+OPT0 = nlminb(start0,loglik0,control=list(maxit=10000))
+OPT0
+
+AIC0 <- 2*OPT0$objective + 2*length(start0)
+
+# Comparison: the model with two-piece t marginals is slightly better
+c(AIC,AIC0)
+
+#####################################################################################################################################################
+# Contour plots
+#####################################################################################################################################################
+# Fitted density
+pred.den <- function(x){
+    mu = OPT$par[1:2]
+    sigma = OPT$par[3:4]
+    rho = OPT$par[7]
+    nu = OPT$par[8]
+    nu1 = OPT$par[5]
+    nu2 = OPT$par[6]
+    epsilon = OPT$par[9:10]
+    t.cop = tCopula(rho,dim=2,df=nu)
+    prob.t =cbind(ptp4(x[1]-mu[1],0,sigma[1],epsilon[1],nu1,param="eps",FUN=pt),ptp4(x[2]-mu[2],0,sigma[2],epsilon[2],nu2,param="eps",FUN=pt))
+    var = dCopula(prob.t, copula=t.cop, log=FALSE)*dtp4(x[1]-mu[1],0,sigma[1],epsilon[1],nu1,param="eps",FUN=dt)*dtp4(x[2]-mu[2],0,sigma[2],epsilon[2],nu1,param="eps",FUN=dt)
+  return(var)
+}
+
+# Constructing the grid
+x <- (-100:100)/1000
+X <- grid2d(x)
+z <- apply(cbind(X$x,X$y),1,pred.den)
+
+ZD <- list(x = x, y = x, z = matrix(z, ncol = length(x)))
+# Contour Density Plot:
+plot(as.vector(Y[,1]),as.vector(Y[,2]),xlim=c(-0.075,0.075),ylim=c(-0.2,0.15), main="Fitted Density Contours",xlab="SMI",ylab="Swiss.Re",cex.axis=1.5,cex.lab=1.5)
+par(new=TRUE)
+contour(ZD,levels = c(0.75,1,2,4,8,16,32,64,128,256,512,1024,2048),xlim=c(-0.075,0.075),ylim=c(-0.2,0.15),col="red",cex.axis=1.5,cex.lab=1.5)
+
+#####################################################################################################################################################
+# Contour plots
+#####################################################################################################################################################
+# Fitted density
+pred.den0 <- function(x){
+  mu = OPT0$par[1:2]
+  sigma = OPT0$par[3:4]
+  rho = OPT0$par[7]
+  nu = OPT0$par[8]
+  nu1 = OPT0$par[5]
+  nu2 = OPT0$par[6]
+  t.cop = tCopula(rho,dim=2,df=nu)
+  prob.t =cbind(pt((x[1]-mu[1])/sigma[1],df=nu1),pt((x[2]-mu[2])/sigma[2],df=nu2))
+  var = dCopula(prob.t, copula=t.cop, log=FALSE)*dt((x[1]-mu[1])/sigma[1],df=nu1)*dt((x[2]-mu[2])/sigma[2],df=nu2)/(sigma[1]*sigma[2])
+  return(var)
+}
+
+# Constructing the grid
+x <- (-100:100)/1000
+X <- grid2d(x)
+z0 <- apply(cbind(X$x,X$y),1,pred.den0)
+
+ZD0 <- list(x = x, y = x, z = matrix(z0, ncol = length(x)))
+# Contour Density Plot:
+plot(as.vector(Y[,1]),as.vector(Y[,2]),xlim=c(-0.075,0.075),ylim=c(-0.2,0.15), main="Fitted Density Contours",xlab="SMI",ylab="Swiss.Re",cex.axis=1.5,cex.lab=1.5)
+par(new=TRUE)
+contour(ZD0,levels = c(1.5,2,4,8,16,32,64,128,256,512,1024,2048),xlim=c(-0.075,0.075),ylim=c(-0.2,0.15),col="blue",cex.axis=1.5,cex.lab=1.5)
+```

@@ -1,0 +1,236 @@
+---
+title: "An application of an objective prior for the number of degrees of freedom of a multivariate t distribution"
+author: '[F. Javier Rubio](https://sites.google.com/site/fjavierrubio67/) and Cristiano Villa'
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## A financial application of an objective prior for the number of degrees of freedom of a multivariate t distribution
+
+The [$d$-variate $t$ probability density function](https://en.wikipedia.org/wiki/Multivariate_t-distribution) with $\nu>0$ degrees of freedom (see \citealp{L94} and \citealp{K04} for an extensive review of this model) is given by
+$$
+f_d({\bf x}\vert {\mu},{\Sigma},\nu) = \dfrac{\Gamma\left(\dfrac{\nu+d}{2}\right)}{\Gamma\left(\dfrac{\nu}{2}\right)\sqrt{(\pi\nu)^d\vert{\Sigma}\vert}}  \left(1+\dfrac{({\bf x}-{\mu})^{T}{\Sigma}^{-1}({\bf x}-{\mu})}{\nu}\right)^{-\frac{\nu+d}{2}},
+$$
+[1] derived a discrete objective prior for the number of degrees of freedom of the multivariate $t$ distribution. This prior is truncated at $\nu_{\max}$, pre-specified by the user, typically $\nu_{\max}=30$ and discrete, see [3] for more details.
+
+Here, we present a financial application of the multivariate $t$ distribution, using the prior for the degrees of freedom parameter proposed in [1], where we model jointly the daily log-returns for the Swiss Market Index (SMI) and Swiss reinsurer (Swiss.Re). The data are available from the R package 'ghyp' and contain $n = 1769$ observations corresponding to the period January 2000 to January 2007. 
+
+
+
+**References**
+
+1. [Objective priors for the number of degrees of freedom of a multivariate t distribution and the t-copula](https://arxiv.org/abs/1701.05638)
+
+2. [Kullback Leibler divergence between two multivariate t distributions](http://rpubs.com/FJRubio/DKLt)
+
+3. [An objective prior for the number of degrees of freedom of a multivariate t distribution](http://rpubs.com/FJRubio/PriortKL)
+
+
+```{r }
+##############################################################################################
+# Data from : Statistics and Data Analysis for Financial Engineering pp. 180
+##############################################################################################
+rm(list=ls())
+library(mnormt)
+library(mvtnorm)
+library(mcmc)
+library(Ecdat)
+library(knitr)
+
+data(CRSPday, package = "Ecdat")
+Y = CRSPday[ , c(5, 7)]
+
+##############################################################################################
+# Optimisation step as in the book
+##############################################################################################
+
+loglik = function(par){
+  mu = par[1:2]
+  A = matrix(c(par[3], par[4], 0, par[5]), nrow = 2, byrow = T)
+  scale_matrix = t(A) %*% A
+  df = par[6]
+  -sum(log(dmt(Y, mean = mu, S = scale_matrix, df = df)))
+}
+
+A = chol(cov(Y))
+start = as.vector(c(apply(Y, 2, mean),A[1, 1], A[1, 2], A[2, 2], 4))
+fit_mvt = optim(start, loglik, method = "L-BFGS-B",lower = c(-0.02, -0.02, -0.1, -0.1, -0.1, 2),upper = c(0.02, 0.02, 0.1, 0.1, 0.1, 15), hessian = T)
+
+##############################################################################################
+# Optimisation step
+##############################################################################################
+
+llt = function(par){
+  if(par[3]>0 & par[5]>0 & par[6]>0){
+    mu = par[1:2]
+    A = matrix(c(par[3], par[4], 0, par[5]), nrow = 2, byrow = T)
+    Sigma = t(A) %*% A
+    var = dmvt(Y, delta = mu, sigma = Sigma, df = par[6], log = TRUE,type = "shifted")
+    return( -sum(var) )
+  }
+  else return(Inf)
+}
+
+loglik(start)
+llt(start)
+
+OPT = optim(start,llt,control=list(maxit=1000))
+
+# The optimisation implemented here is slightly better
+OPT$val
+fit_mvt$val
+
+OPT$par
+fit_mvt$par
+
+
+##############################################################################################
+# log prior
+##############################################################################################
+# Kullback Leibler in two dimensions
+rm(d)
+d=2 # dimension
+
+# Normalising constant
+K <- function(d,nu) (gamma(0.5*(nu+d))/( gamma(0.5*nu)*sqrt((pi*nu)^d) ))
+
+# Kullback Liebler divergence
+DKL <- function(nu,nup){
+  val1 <- log(K(d,nu)/K(d,nup)) -0.5*(nu+d)*(digamma(0.5*(nu+d))-digamma(0.5*nu))  
+  tempf <- Vectorize(function(t) (1+t/nu)^(-0.5*(nu+d))*t^(0.5*d-1)*log(1+t/nup))
+  int<- integrate(tempf,0,Inf,rel.tol = 1e-9)$value
+  val2 <- (K(d,nu)*pi^(0.5*d)*0.5*(nup+d)/gamma(0.5*d))*int
+  return(val1+val2)
+}
+
+numax = 30
+
+T2 <- matrix(0,ncol=3,nrow=numax)
+T2[1,] <- c(1,0,DKL(1,2))
+for(i in 2:numax) T2[i,] = c(i,DKL(i,i-1),DKL(i,i+1))
+colnames(T2) <- c("nu","DKL(nu,nu-1)","DKL(nu,nu+1)")
+rownames(T2) <- 1:numax
+print(kable(T2,digits=12))
+
+
+
+prior = Vectorize(function(nu){
+  var =ifelse(nu<(numax-1), exp( T2[nu,3]),exp( T2[nu,2]))
+  return(var-1)
+})
+
+vec = 1:numax
+pr1 = prior(vec)
+npr1 = pr1/sum(pr1)
+
+lprior = Vectorize(function(nu) log(npr1[nu]))
+
+# Objective prior for nu
+plot(npr1,ylim=c(0,0.8),xlab=~nu,ylab="Prior probability",main="Objective prior",cex.axis=1.5,cex.lab=1.5,pch=19,cex=1.5)
+
+##############################################################################################
+# log posterior
+##############################################################################################
+
+lpt = function(par){
+  if(par[3]>0 & par[5]>0 & par[6]>0 & par[6]<31 & par[6]%%1==0){
+    mu = par[1:2]
+    A = matrix(c(par[3], par[4], 0, par[5]), nrow = 2, byrow = T)
+    Sigma = t(A) %*% A
+    var = dmvt(Y, delta = mu, sigma = Sigma, df = par[6], log = TRUE,type = "shifted")
+    return( sum(var) + lprior(par[6]) - 1.5*log(det(Sigma)) )
+  }
+  else return(-Inf)
+}
+
+
+# Function to sample from the discrete parameter nu
+post.samp.nu =function(par) {  
+  lpr = probr = vector()
+  for(k in 1:30) lpr[k] = lpt(c(par[1:5],k))
+  for(k in 1:30) probr[k] = 1/sum(exp(lpr-lpr[k]))
+  return(sample(1:30, 1, prob = probr))
+}
+
+# number of iterations
+NS= 55000
+
+# Sampler (Metropolis step for the continuous parameters)
+# Approximately 10 minutes running time (status bar available)
+samp = matrix(0,nrow=NS,ncol=6)
+samp[1,] = start
+# Initiate the status bar
+#sb <- txtProgressBar(min = 0, max = NS, style = 3)
+
+for(i in 2:NS){
+  samp[i,6] =  post.samp.nu(samp[i-1,1:5])
+  tempf = function(par) lpt(c(par,samp[i,6]))
+  samp[i,1:5] = metrop(tempf, samp[i-1,1:5], 1, scale = c(0.0003,0.0001,0.0002,0.0001,0.0001))$final
+  # Update the status var
+ # setTxtProgressBar(sb, i)
+}
+
+# Some histograms and traceplots
+burn = 5000
+thin =  50
+index = seq(burn,NS,thin)
+
+mu1p = samp[index,1]
+mu2p = samp[index,2]
+sigma1p = samp[index,3]
+sigma2p = samp[index,4]
+sigma3p = samp[index,5]
+nup = samp[index,6]
+
+hist(mu1p)
+hist(mu2p)
+hist(sigma1p)
+hist(sigma2p)
+hist(sigma3p)
+hist(nup)
+
+plot(mu1p,type="l")
+plot(mu2p,type="l")
+plot(sigma1p,type="l")
+plot(sigma2p,type="l")
+plot(sigma3p,type="l")
+plot(nup,type="l")
+
+# Comparing posterior means with MLE
+colMeans(samp[index,])
+OPT$par
+
+
+###############################################################################
+# Posterior density plots using the posterior mean estimators
+###############################################################################
+
+postmean = colMeans(samp[index,])
+
+post.mean.den = function(x){
+  mu = postmean[1:2]
+  A = matrix(c(postmean[3], postmean[4], 0, postmean[5]), nrow = 2, byrow = T)
+  Sigma = t(A) %*% A
+  var = dmvt(x, delta = mu, sigma = Sigma, df = postmean[6], type = "shifted",log=FALSE)
+  return(var)
+}
+
+library(fMultivar)
+
+# Bivariate fitted posterior density
+x <- (-100:100)/1000
+X <- grid2d(x)
+z <- apply(cbind(X$x,X$y),1,post.mean.den)
+
+ZD <- list(x = x, y = x, z = matrix(z, ncol = length(x)))
+# Perspective Density Plot:
+persp(ZD, theta = 60, phi = 20, col = "steelblue")
+# Contour Density Plot:
+plot(as.vector(Y[,1]),as.vector(Y[,2]),xlim=c(-0.15,0.15),ylim=c(-0.075,0.05), main="Fitted Posterior Density Contours",xlab="IBM",ylab="CRSP",cex.axis=1.5,cex.lab=1.5)
+par(new=TRUE)
+contour(ZD,levels = c(0.55,1,2,4,8,16,32,64,128,256,512,1024,2048),xlim=c(-0.15,0.15),ylim=c(-0.075,0.05),col="red",cex.axis=1.5,cex.lab=1.5,lwd=2)
+```

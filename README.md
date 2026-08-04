@@ -60,7 +60,4 @@ If you use this code, please cite:
 }
 ```
 
-## License
 
-No licence file is currently included in this repository. If you intend to
-reuse or adapt this code, please contact the authors.

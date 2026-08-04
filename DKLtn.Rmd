@@ -1,0 +1,122 @@
+---
+title: "Kullback Leibler divergence between a multivariate t and a multivariate normal distributions"
+author: '[F. Javier Rubio](https://sites.google.com/site/fjavierrubio67/) and Cristiano Villa'
+date: "`r format(Sys.time(), '%d %B, %Y')`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## A tractable, scalable, expression for the Kullback Leibler divergence between a multivariate t and a multivariate normal distributions
+
+The [$d$-variate $t$ probability density function](https://en.wikipedia.org/wiki/Multivariate_t-distribution) with $\nu>0$ degrees of freedom (see \citealp{L94} and \citealp{K04} for an extensive review of this model) is given by
+$$
+f_d({\bf x}\vert {\mu},{\Sigma},\nu) = \dfrac{\Gamma\left(\dfrac{\nu+d}{2}\right)}{\Gamma\left(\dfrac{\nu}{2}\right)\sqrt{(\pi\nu)^d\vert{\Sigma}\vert}}  \left(1+\dfrac{({\bf x}-{\mu})^{T}{\Sigma}^{-1}({\bf x}-{\mu})}{\nu}\right)^{-\frac{\nu+d}{2}},
+$$
+On the other hand, the [$d$-variate normal probability density function](https://en.wikipedia.org/wiki/Multivariate_normal_distribution) is given by
+$$
+N_d({\bf x}\vert {\mu},{\Sigma}) = \dfrac{1}{\sqrt{(2\pi)^d\vert{\Sigma}\vert}} \exp \left(-\dfrac{({\bf x}-{\mu})^{T}{\Sigma}^{-1}({\bf x}-{\mu})}{2}\right),
+$$
+
+[1] found that the [Kullback Leibler divergence](https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence) between a $d$-variate $t$ distribution with $\nu>0$ degrees of freedom and a $d$-variate normal distribution can be written as 
+$$
+D_{KL}\Big(N_d({\bf x}|{\bf {\bf 0}},{\bf I})\|f_d({\bf x}\vert {\bf 0},{\bf I},\nu)\Big) = \int_{{\mathbb R}^n} N_d({\bf x}|{\bf {\bf 0}},{\bf I})\log\left\{\frac{N_d({\bf x}|{\bf {\bf 0}},{\bf I})}{f_d({\bf x}\vert {\bf 0},{\bf I},\nu)}\right\}\,d{\bf x} \notag \\
+= \log\left\{\frac{1}{(2\pi)^{d/2}K(\nu,d)}\right\}-\frac{d}{2} 
++ \frac{\nu+d}{2}\mathbb{E}_{d}\left\{\log\left(1+\frac{{\bf x}^{\top}{\bf x}}{\nu}\right)\right\},
+$$
+where
+$$K(d,\nu)=\dfrac{\Gamma\left(\dfrac{\nu+d}{2}\right)}{\Gamma\left(\dfrac{\nu}{2}\right)\sqrt{(\pi\nu)^d}}.$$
+The expectation in this equation can be reduced to one-dimensional integration using again a change of variable in terms of spherical coordinates:
+$$
+\mathbb{E}_{d}\left\{\log\left(1+\frac{{\bf x}^{\top}{\bf x}}{\nu}\right)\right\} =  \dfrac{1}{2^{\frac{d}{2}}\Gamma\left(\frac{d}{2}\right)}  \int_0^{\infty} e^{-\frac{t}{2}} t^{\frac{d}{2}-1}\log\left(1+\dfrac{t}{\nu}\right) dt.
+$$
+
+
+
+Thus, this expression only involves a 1-dimensional integral, making the calculation of the Kullback Leibler divergence scalable and tractable for any dimension $d=1,2,3,\dots$. The following R code shows the implementation of this divergence for several dimensions.
+
+**References**
+
+1. [Objective priors for the number of degrees of freedom of a multivariate t distribution and the t-copula](https://arxiv.org/abs/1701.05638)
+
+```{r}
+rm(list=ls())
+# Package required for a nice format of the tables 
+library(knitr) 
+
+# Normalising constant
+K <- function(d,nu) (gamma(0.5*(nu+d))/( gamma(0.5*nu)*sqrt((pi*nu)^d) ))
+
+# Kullback Liebler divergence
+DKLn <- function(nu){
+  val1 <- -0.5*d*log(2*pi)  -0.5*d
+  tempf <- Vectorize(function(t) exp(-0.5*t)*t^(0.5*d-1)*log(1+t/nu))
+  int<- integrate(tempf,0,Inf,rel.tol = 1e-9)$value
+  val2 <-  log(K(d,nu)) - 0.5*(nu+d)*(1/(gamma(0.5*d)*2^(0.5*d)))*int
+  return(val1-val2)
+}
+
+# Kullback Liebler divergence: numerical integration 1-d
+DKLn2 <- function(nu){
+  tempf <- Vectorize(function(t) dnorm(t)*(dnorm(t,log=T) - dt(t,df=nu,log=T)))
+  int<- integrate(tempf,-Inf,Inf,rel.tol = 1e-9)$value
+  return(int)
+}
+
+# Kullback Leibler in one dimension
+d=1 # dimension
+
+D <- matrix(0,ncol=2,nrow=30)
+D[,1] <- 1:30
+for(i in 1:30) D[i,2] = DKLn(i)
+colnames(D) <- c("nu","DKLn(nu)")
+rownames(D) <- 1:30
+print(kable(D,digits=12))
+
+# Double check using numerical integration
+D2 <- matrix(0,ncol=2,nrow=30)
+D2[,1] <- 1:30
+for(i in 1:30) D2[i,2] = DKLn2(i)
+colnames(D2) <- c("nu","DKLn2(nu)")
+rownames(D2) <- 1:30
+print(kable(D2,digits=12))
+
+
+# Kullback Leibler in dimesion 2
+rm(d)
+d=2 # dimension
+
+D <- matrix(0,ncol=2,nrow=30)
+D[,1] <- 1:30
+for(i in 1:30) D[i,2] = DKLn(i)
+colnames(D) <- c("nu","DKLn(nu)")
+rownames(D) <- 1:30
+print(kable(D,digits=12))
+
+
+# Kullback Leibler in dimesion 3
+rm(d)
+d=3 # dimension
+
+D <- matrix(0,ncol=2,nrow=30)
+D[,1] <- 1:30
+for(i in 1:30) D[i,2] = DKLn(i)
+colnames(D) <- c("nu","DKLn(nu)")
+rownames(D) <- 1:30
+print(kable(D,digits=12))
+
+
+# Kullback Leibler in dimesion 50
+rm(d)
+d=50 # dimension
+
+D <- matrix(0,ncol=2,nrow=30)
+D[,1] <- 1:30
+for(i in 1:30) D[i,2] = DKLn(i)
+colnames(D) <- c("nu","DKLn(nu)")
+rownames(D) <- 1:30
+print(kable(D,digits=12))
+```
+
